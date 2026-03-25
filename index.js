@@ -1,3 +1,8 @@
+const { Client, GatewayIntentBits, Partials } = require('discord.js');
+
+const verificationSystem = require('./systems/verification');
+const promotionSystem = require('./systems/promotions');
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -8,3 +13,12 @@ const client = new Client({
   ],
   partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
+
+client.once("ready", () => {
+  console.log(`Logged in as ${client.user.tag}`);
+});
+
+verificationSystem(client);
+promotionSystem(client);
+
+client.login(process.env.TOKEN);
