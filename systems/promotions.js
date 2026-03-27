@@ -25,7 +25,7 @@ module.exports = (client) => {
       const target = message.mentions.members.first();
       const roleId = args[2];
 
-      if (!target || !roleId) {
+      if (!target || !role) {
         return message.reply("Usage: !setrank @user ROLE_ID");
       }
 
@@ -37,11 +37,11 @@ module.exports = (client) => {
       }
 
       // Add new rank
-      await target.roles.add(roleId);
+      await target.roles.add(role.id);
 
       if (logChannel) {
         await logChannel.send(
-          `Member: ${target.user.tag} was set to rank <@&${roleId}> by ${message.author.tag} at <t:${unixTime}:F>`
+          `Member: ${target.user.tag} was set to rank <@&${role.id}> by ${message.author.tag} at <t:${unixTime}:F>`
         );
       }
 
