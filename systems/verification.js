@@ -19,7 +19,12 @@ module.exports = (client) => {
       );
       if (!isHR) return;
 
-      const target = await guild.members.fetch(reaction.message.author.id);
+     let target;
+try {
+  target = await guild.members.fetch(reaction.message.author.id);
+} catch {
+  return; // user not in server anymore
+}
       const logChannel = guild.channels.cache.get(config.LOG_CHANNEL_ID);
       const unixTime = Math.floor(Date.now() / 1000);
 
