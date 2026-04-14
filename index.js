@@ -1,10 +1,8 @@
 const mongoose = require("mongoose");
 const { Client, GatewayIntentBits } = require("discord.js");
 
-// your other imports (keep yours below)
 const blacklist = require("./systems/blacklist");
 
-// create client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -13,20 +11,15 @@ const client = new Client({
   ]
 });
 
-// -------------------- STARTUP --------------------
-
 async function startBot() {
   try {
-    // 1. CONNECT TO MONGO FIRST (CRITICAL FIX)
+    // connect DB first
     await mongoose.connect(process.env.MONGO_URI);
-
     console.log("MongoDB connected");
 
-    // 2. SAFE DB TEST (optional but useful)
-    await blacklist.find({});
-    console.log("Blacklist collection loaded");
+    // DO NOT query DB here
 
-    // 3. LOGIN DISCORD ONLY AFTER DB IS READY
+    // login discord after DB ready
     await client.login(process.env.TOKEN);
 
   } catch (err) {
@@ -34,12 +27,8 @@ async function startBot() {
   }
 }
 
-// -------------------- EVENTS --------------------
-
 client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
 });
-
-// -------------------- START --------------------
 
 startBot();
