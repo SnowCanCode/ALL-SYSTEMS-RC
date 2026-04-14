@@ -84,8 +84,8 @@ module.exports = (client) => {
       if (!interaction.isChatInputCommand()) return;
       if (interaction.commandName !== 'blacklist') return;
 
-      // 🔥 FIX: prevent timeout
-      await interaction.deferReply({ ephemeral: true });
+      // FIX: prevent timeout
+      await interaction.deferReply();
 
       const member = interaction.member;
 
