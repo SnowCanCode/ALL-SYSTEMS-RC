@@ -1,26 +1,45 @@
-const { Client, GatewayIntentBits, Partials } = require('discord.js');
+const mongoose = require("mongoose");
+const { Client, GatewayIntentBits } = require("discord.js");
 
-const verificationSystem = require('./systems/verification');
-const promotionSystem = require('./systems/promotions');
-const blacklistSystem = require('./systems/blacklist');
+// your other imports (keep yours below)
+const blacklist = require("./systems/blacklist");
 
+// create client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.GuildMessageReactions,
-    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.MessageContent
-  ],
-  partials: [Partials.Message, Partials.Channel, Partials.Reaction]
+  ]
 });
+
+// -------------------- STARTUP --------------------
+
+async function startBot() {
+  try {
+    // 1. CONNECT TO MONGO FIRST (CRITICAL FIX)
+    await mongoose.connect(process.env.MONGO_URI);
+
+    console.log("MongoDB connected");
+
+    // 2. SAFE DB TEST (optional but useful)
+    await blacklist.find({});
+    console.log("Blacklist collection loaded");
+
+    // 3. LOGIN DISCORD ONLY AFTER DB IS READY
+    await client.login(process.env.TOKEN);
+
+  } catch (err) {
+    console.error("Startup error:", err);
+  }
+}
+
+// -------------------- EVENTS --------------------
 
 client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
 });
 
-verificationSystem(client);
-promotionSystem(client);
-blacklistSystem(client);
+// -------------------- START --------------------
 
-client.login(process.env.TOKEN);
+startBot();
