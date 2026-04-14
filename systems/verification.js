@@ -19,12 +19,10 @@ module.exports = (client) => {
       );
       if (!isHR) return;
 
-     let target;
-try {
-  target = await guild.members.fetch(reaction.message.author.id);
-} catch {
-  return; // user not in server anymore
-}
+      // Handle member having left the server
+      const target = await guild.members.fetch(reaction.message.author.id).catch(() => null);
+      if (!target) return;
+
       const logChannel = guild.channels.cache.get(config.LOG_CHANNEL_ID);
       const unixTime = Math.floor(Date.now() / 1000);
 
@@ -46,13 +44,13 @@ try {
         if (accountAgeDays < config.MIN_ACCOUNT_AGE_DAYS) {
           if (logChannel) {
             await logChannel.send(
-              `Verification failed for ${target.user.tag} (account too new: ${accountAgeDays.toFixed(1)} days)`
+              `❌ Verification failed for ${target.user.tag} — account too new (${accountAgeDays.toFixed(1)} days old).`
             );
           }
           return;
         }
 
-        // Add roles
+        // Add verified roles
         for (const roleId of config.VERIFIED_ROLE_IDS) {
           if (!target.roles.cache.has(roleId)) {
             await target.roles.add(roleId);
@@ -68,7 +66,7 @@ try {
 
         if (logChannel) {
           await logChannel.send(
-            `Member: ${target.user.tag} was verified by ${reactor.user.tag} at <t:${unixTime}:F>`
+            `✅ ${target.user.tag} was verified by ${reactor.user.tag} at <t:${unixTime}:F>`
           );
         }
       }
@@ -77,6 +75,25 @@ try {
       // UNVERIFY (❌)
       // =========================
       if (reaction.emoji.name === config.UNVERIFY_EMOJI) {
+
+        // Prevent unverifying HR members
+        const targetIsHR = config.HR_ROLE_IDS.some(roleId =>
+          target.roles.cache.has(roleId)
+        );
+        if (targetIsHR) {
+          if (logChannel) {
+            await logChannel.send(
+              `⚠️ ${reactor.user.tag} attempted to unverify HR member ${target.user.tag} — blocked.`
+            );
+          }
+          return;
+        }
+
+        // Prevent double unverify
+        const alreadyUnverified = !config.VERIFIED_ROLE_IDS.some(roleId =>
+          target.roles.cache.has(roleId)
+        );
+        if (alreadyUnverified) return;
 
         // Remove verified roles
         for (const roleId of config.VERIFIED_ROLE_IDS) {
@@ -94,7 +111,7 @@ try {
 
         if (logChannel) {
           await logChannel.send(
-            `Member: ${target.user.tag} was unverified by ${reactor.user.tag} at <t:${unixTime}:F>`
+            `🔴 ${target.user.tag} was unverified by ${reactor.user.tag} at <t:${unixTime}:F>`
           );
         }
       }
