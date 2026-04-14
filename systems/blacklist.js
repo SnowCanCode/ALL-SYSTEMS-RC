@@ -8,7 +8,6 @@ module.exports = (client) => {
   // REGISTER COMMANDS
   // =========================
   client.once('ready', async () => {
-
     const commands = [
       new SlashCommandBuilder()
         .setName('blacklist')
@@ -18,225 +17,237 @@ module.exports = (client) => {
             .setDescription('Add a user to the blacklist')
             .addStringOption(opt =>
               opt.setName('userid')
-                .setDescription('The user ID to blacklist')
+                .setDescription('The user ID')
                 .setRequired(true))
             .addStringOption(opt =>
               opt.setName('reason')
-                .setDescription('Reason for blacklisting')
+                .setDescription('Reason')
                 .setRequired(true))
         )
         .addSubcommand(sub =>
           sub.setName('remove')
-            .setDescription('Remove a user from the blacklist')
+            .setDescription('Remove a user')
             .addStringOption(opt =>
               opt.setName('userid')
-                .setDescription('The user ID to remove')
+                .setDescription('The user ID')
                 .setRequired(true))
         )
         .addSubcommand(sub =>
           sub.setName('list')
-            .setDescription('View all blacklisted users')
+            .setDescription('View blacklist')
         )
     ];
 
     const guild = client.guilds.cache.get(config.GUILD_ID);
-
-    if (!guild) {
-      console.log('Guild not found - check GUILD_ID');
-      return;
-    }
+    if (!guild) return console.log('Guild not found');
 
     try {
       await guild.commands.set(commands);
-
-      console.log(`Logged in as: ${client.user.tag}`);
       console.log('Slash commands registered successfully');
-      console.log(`Commands active in: ${guild.name}`);
-
-      const fetched = await guild.commands.fetch();
-      console.log(`Verified commands: ${fetched.size}`);
-
     } catch (err) {
-      console.log('Failed to register commands:', err);
+      console.log('Command register error:', err);
     }
   });
 
   // =========================
-  // HANDLE COMMANDS
+  // COMMAND HANDLER (FIXED)
   // =========================
   client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
-    if (interaction.commandName !== 'blacklist') return;
+    try {
+      if (!interaction.isChatInputCommand()) return;
+      if (interaction.commandName !== 'blacklist') return;
 
-    const member = interaction.member;
+      // 🔥 FIX: prevent timeout
+      await interaction.deferReply({ ephemeral: true });
 
-    const isHR = config.HR_ROLE_IDS.some(roleId =>
-      member.roles.cache.has(roleId)
-    );
+      const member = interaction.member;
 
-    if (!isHR) {
-      return interaction.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0xFF0000)
-            .setDescription('No permission.')
-        ],
-        ephemeral: true
-      });
-    }
+      const isHR = config.HR_ROLE_IDS.some(roleId =>
+        member.roles.cache.has(roleId)
+      );
 
-    const sub = interaction.options.getSubcommand();
-
-    // ADD
-    if (sub === 'add') {
-      const userId = interaction.options.getString('userid');
-      const reason = interaction.options.getString('reason');
-
-      const existing = await Blacklist.findOne({ userId });
-      if (existing) {
-        return interaction.reply({
+      if (!isHR) {
+        return interaction.editReply({
           embeds: [
             new EmbedBuilder()
               .setColor(0xFF0000)
-              .setDescription('User already blacklisted.')
-          ],
-          ephemeral: true
+              .setDescription('No permission.')
+          ]
         });
       }
 
-      const targetUser = await client.users.fetch(userId).catch(() => null);
-      if (!targetUser) {
-        return interaction.reply({
+      const sub = interaction.options.getSubcommand();
+
+      // =========================
+      // ADD
+      // =========================
+      if (sub === 'add') {
+        const userId = interaction.options.getString('userid');
+        const reason = interaction.options.getString('reason');
+
+        const existing = await Blacklist.findOne({ userId });
+        if (existing) {
+          return interaction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(0xFF0000)
+                .setDescription('User already blacklisted.')
+            ]
+          });
+        }
+
+        const targetUser = await client.users.fetch(userId).catch(() => null);
+        if (!targetUser) {
+          return interaction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(0xFF0000)
+                .setDescription('Invalid user ID.')
+            ]
+          });
+        }
+
+        await Blacklist.create({
+          userId,
+          username: targetUser.tag,
+          reason,
+          blacklistedBy: interaction.user.tag
+        });
+
+        const targetMember = await interaction.guild.members.fetch(userId).catch(() => null);
+        if (targetMember && targetMember.kickable) {
+          await targetMember.kick(`Blacklisted: ${reason}`);
+        }
+
+        return interaction.editReply({
           embeds: [
             new EmbedBuilder()
               .setColor(0xFF0000)
-              .setDescription('Invalid user ID.')
-          ],
-          ephemeral: true
+              .setTitle('User Blacklisted')
+              .addFields(
+                { name: 'User', value: targetUser.tag, inline: true },
+                { name: 'Reason', value: reason, inline: true },
+                { name: 'By', value: interaction.user.tag, inline: true }
+              )
+          ]
         });
       }
 
-      await Blacklist.create({
-        userId,
-        username: targetUser.tag,
-        reason,
-        blacklistedBy: interaction.user.tag
-      });
+      // =========================
+      // REMOVE
+      // =========================
+      if (sub === 'remove') {
+        const userId = interaction.options.getString('userid');
 
-      const targetMember = await interaction.guild.members.fetch(userId).catch(() => null);
-      if (targetMember && targetMember.kickable) {
-        await targetMember.kick(`Blacklisted: ${reason}`);
-      }
+        const entry = await Blacklist.findOneAndDelete({ userId });
 
-      return interaction.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0xFF0000)
-            .setTitle('User Blacklisted')
-            .addFields(
-              { name: 'User', value: targetUser.tag, inline: true },
-              { name: 'Reason', value: reason, inline: true },
-              { name: 'By', value: interaction.user.tag, inline: true }
-            )
-        ]
-      });
-    }
+        if (!entry) {
+          return interaction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(0xFF0000)
+                .setDescription('User not blacklisted.')
+            ]
+          });
+        }
 
-    // REMOVE
-    if (sub === 'remove') {
-      const userId = interaction.options.getString('userid');
-
-      const entry = await Blacklist.findOneAndDelete({ userId });
-
-      if (!entry) {
-        return interaction.reply({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(0xFF0000)
-              .setDescription('User not blacklisted.')
-          ],
-          ephemeral: true
-        });
-      }
-
-      return interaction.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0x00FF00)
-            .setTitle('Removed from blacklist')
-            .addFields(
-              { name: 'User', value: entry.username, inline: true },
-              { name: 'By', value: interaction.user.tag, inline: true }
-            )
-        ]
-      });
-    }
-
-    // LIST
-    if (sub === 'list') {
-      const entries = await Blacklist.find();
-
-      if (!entries.length) {
-        return interaction.reply({
+        return interaction.editReply({
           embeds: [
             new EmbedBuilder()
               .setColor(0x00FF00)
-              .setDescription('Blacklist is empty.')
-          ],
+              .setTitle('Removed from blacklist')
+              .addFields(
+                { name: 'User', value: entry.username, inline: true },
+                { name: 'By', value: interaction.user.tag, inline: true }
+              )
+          ]
+        });
+      }
+
+      // =========================
+      // LIST
+      // =========================
+      if (sub === 'list') {
+        const entries = await Blacklist.find();
+
+        if (!entries.length) {
+          return interaction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(0x00FF00)
+                .setDescription('Blacklist is empty.')
+            ]
+          });
+        }
+
+        const embed = new EmbedBuilder()
+          .setColor(0xFF0000)
+          .setTitle('Blacklist')
+          .setDescription(`${entries.length} users`);
+
+        for (const entry of entries.slice(0, 25)) {
+          embed.addFields({
+            name: entry.username || 'Unknown',
+            value: `ID: ${entry.userId}\nReason: ${entry.reason}`,
+            inline: true
+          });
+        }
+
+        return interaction.editReply({ embeds: [embed] });
+      }
+
+    } catch (err) {
+      console.error(err);
+
+      if (interaction.deferred || interaction.replied) {
+        return interaction.editReply({
+          content: 'An error occurred while processing the command.'
+        });
+      } else {
+        return interaction.reply({
+          content: 'An error occurred.',
           ephemeral: true
         });
       }
-
-      const embed = new EmbedBuilder()
-        .setColor(0xFF0000)
-        .setTitle('Blacklist')
-        .setDescription(`${entries.length} users`);
-
-      for (const entry of entries.slice(0, 25)) {
-        embed.addFields({
-          name: entry.username,
-          value: `ID: ${entry.userId}\nReason: ${entry.reason}`,
-          inline: true
-        });
-      }
-
-      return interaction.reply({ embeds: [embed], ephemeral: true });
     }
   });
 
   // =========================
-  // REJOIN CHECK
+  // REJOIN CHECK (SAFE)
   // =========================
   client.on('guildMemberAdd', async (member) => {
-    const entry = await Blacklist.findOne({ userId: member.id });
-    if (!entry) return;
+    try {
+      const entry = await Blacklist.findOne({ userId: member.id });
+      if (!entry) return;
 
-    const banDays = config.BLACKLIST_BAN_DAYS;
-    const expiry = Math.floor((Date.now() + banDays * 86400000) / 1000);
+      const banDays = config.BLACKLIST_BAN_DAYS;
+      const expiry = Math.floor((Date.now() + banDays * 86400000) / 1000);
 
-    await member.send(
-      `You are blacklisted.\nReason: ${entry.reason}`
-    ).catch(() => null);
+      await member.send(`You are blacklisted.\nReason: ${entry.reason}`).catch(() => null);
 
-    if (member.bannable) {
-      await member.ban({ reason: entry.reason });
-    }
+      if (member.bannable) {
+        await member.ban({ reason: entry.reason });
+      }
 
-    const logChannel = member.guild.channels.cache.get(config.LOG_CHANNEL_ID);
+      const logChannel = member.guild.channels.cache.get(config.LOG_CHANNEL_ID);
 
-    if (logChannel) {
-      logChannel.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0xFF0000)
-            .setTitle('Blacklisted User Banned on Rejoin')
-            .addFields(
-              { name: 'User', value: member.user.tag, inline: true },
-              { name: 'Reason', value: entry.reason, inline: true },
-              { name: 'Expires', value: `<t:${expiry}:F>`, inline: true }
-            )
-        ]
-      });
+      if (logChannel) {
+        logChannel.send({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0xFF0000)
+              .setTitle('Blacklisted User Banned on Rejoin')
+              .addFields(
+                { name: 'User', value: member.user.tag, inline: true },
+                { name: 'Reason', value: entry.reason, inline: true },
+                { name: 'Expires', value: `<t:${expiry}:F>`, inline: true }
+              )
+          ]
+        });
+      }
+
+    } catch (err) {
+      console.error('Rejoin check error:', err);
     }
   });
 
