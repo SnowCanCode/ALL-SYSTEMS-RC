@@ -6,7 +6,8 @@ module.exports = {
   // Roles allowed to verify
   HR_ROLE_IDS: [
     "1483324856266264626",
-    "1419827211598299167"
+    "1419827211598299167",
+    "1419827231026450568"
   ],
 
   // Roles given when verified
